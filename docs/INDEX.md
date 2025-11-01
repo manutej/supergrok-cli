@@ -17,6 +17,7 @@
 
 ### For Developers
 - **[Phase 1 Implementation Guide](../PHASE1_IMPLEMENTATION_GUIDE.md)** - Week-by-week development plan
+- **[Orchestration Usage Guide](./ORCHESTRATION_USAGE.md)** - Multi-agent orchestration system
 - **[Architecture Diagrams](./diagrams/)** - Visual system architecture
 - **[Class Diagrams](./diagrams/class-diagram.puml)** - UML class structure
 

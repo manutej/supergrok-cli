@@ -43,6 +43,11 @@ export interface GrokResponse {
     };
     finish_reason: string;
   }>;
+  usage?: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+  };
 }
 
 export class GrokClient {
