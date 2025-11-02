@@ -57,7 +57,9 @@ export class GrokClient {
       timeout: 360000,
     });
     const envMax = Number(process.env.GROK_MAX_TOKENS);
-    this.defaultMaxTokens = Number.isFinite(envMax) && envMax > 0 ? envMax : 1536;
+    // Default to 32K tokens for output (Grok models support 128K context)
+    // This allows for comprehensive responses while staying well within limits
+    this.defaultMaxTokens = Number.isFinite(envMax) && envMax > 0 ? envMax : 32768;
     if (model) {
       this.currentModel = model;
     }

@@ -388,7 +388,11 @@ program
         ? message.join(" ")
         : message;
 
-      render(React.createElement(ChatInterface, { agent, initialMessage }));
+      // Configure Ink to prevent flickering
+      render(React.createElement(ChatInterface, { agent, initialMessage }), {
+        patchConsole: false,  // Don't patch console to prevent flickering
+        exitOnCtrlC: false,   // We handle Ctrl+C ourselves
+      });
     } catch (error: any) {
       console.error("❌ Error initializing Grok CLI:", error.message);
       process.exit(1);

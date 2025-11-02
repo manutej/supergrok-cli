@@ -429,6 +429,8 @@ Respond with ONLY the commit message, no additional text.`;
 
         let commitMessage = "";
         let streamingEntry: ChatEntry | null = null;
+        let lastUpdateTime = 0;
+        const UPDATE_INTERVAL = 750; // Throttle updates to every 750ms for maximum stability
 
         for await (const chunk of agent.processUserMessageStream(
           commitPrompt
@@ -444,21 +446,29 @@ Respond with ONLY the commit message, no additional text.`;
               setChatHistory((prev) => [...prev, newEntry]);
               streamingEntry = newEntry;
               commitMessage = chunk.content;
+              lastUpdateTime = Date.now();
             } else {
               commitMessage += chunk.content;
-              setChatHistory((prev) =>
-                prev.map((entry, idx) =>
-                  idx === prev.length - 1 && entry.isStreaming
-                    ? {
-                        ...entry,
-                        content: `Generating commit message...\n\n${commitMessage}`,
-                      }
-                    : entry
-                )
-              );
+              const now = Date.now();
+
+              // Only update UI if enough time has passed (throttle updates)
+              if (now - lastUpdateTime >= UPDATE_INTERVAL) {
+                setChatHistory((prev) =>
+                  prev.map((entry, idx) =>
+                    idx === prev.length - 1 && entry.isStreaming
+                      ? {
+                          ...entry,
+                          content: `Generating commit message...\n\n${commitMessage}`,
+                        }
+                      : entry
+                  )
+                );
+                lastUpdateTime = now;
+              }
             }
           } else if (chunk.type === "done") {
             if (streamingEntry) {
+              // Final update with complete message
               setChatHistory((prev) =>
                 prev.map((entry) =>
                   entry.isStreaming
@@ -621,6 +631,9 @@ Respond with ONLY the commit message, no additional text.`;
     try {
       setIsStreaming(true);
       let streamingEntry: ChatEntry | null = null;
+      let accumulatedContent = "";
+      let lastUpdateTime = 0;
+      const UPDATE_INTERVAL = 750; // Throttle updates to every 750ms for maximum stability
 
       for await (const chunk of agent.processUserMessageStream(userInput)) {
         switch (chunk.type) {
@@ -635,14 +648,23 @@ Respond with ONLY the commit message, no additional text.`;
                 };
                 setChatHistory((prev) => [...prev, newStreamingEntry]);
                 streamingEntry = newStreamingEntry;
+                accumulatedContent = chunk.content;
+                lastUpdateTime = Date.now();
               } else {
-                setChatHistory((prev) =>
-                  prev.map((entry, idx) =>
-                    idx === prev.length - 1 && entry.isStreaming
-                      ? { ...entry, content: entry.content + chunk.content }
-                      : entry
-                  )
-                );
+                accumulatedContent += chunk.content;
+                const now = Date.now();
+
+                // Only update UI if enough time has passed (throttle updates)
+                if (now - lastUpdateTime >= UPDATE_INTERVAL) {
+                  setChatHistory((prev) =>
+                    prev.map((entry, idx) =>
+                      idx === prev.length - 1 && entry.isStreaming
+                        ? { ...entry, content: accumulatedContent }
+                        : entry
+                    )
+                  );
+                  lastUpdateTime = now;
+                }
               }
             }
             break;
@@ -712,9 +734,12 @@ Respond with ONLY the commit message, no additional text.`;
 
           case "done":
             if (streamingEntry) {
+              // Final update with any remaining accumulated content
               setChatHistory((prev) =>
                 prev.map((entry) =>
-                  entry.isStreaming ? { ...entry, isStreaming: false } : entry
+                  entry.isStreaming
+                    ? { ...entry, content: accumulatedContent, isStreaming: false }
+                    : entry
                 )
               );
             }

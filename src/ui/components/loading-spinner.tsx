@@ -6,6 +6,7 @@ interface LoadingSpinnerProps {
   isActive: boolean;
   processingTime: number;
   tokenCount: number;
+  isStreaming?: boolean;  // Add flag to know if content is actually flowing
 }
 
 const loadingTexts = [
@@ -29,12 +30,14 @@ export function LoadingSpinner({
   isActive,
   processingTime,
   tokenCount,
+  isStreaming = false,
 }: LoadingSpinnerProps) {
   const [spinnerFrame, setSpinnerFrame] = useState(0);
   const [loadingTextIndex, setLoadingTextIndex] = useState(0);
 
+  // Only animate spinner when actually streaming content
   useEffect(() => {
-    if (!isActive) return;
+    if (!isActive || !isStreaming) return;
 
     const spinnerFrames = ["/", "-", "\\", "|"];
     // Reduced frequency: 500ms instead of 250ms to reduce flickering on Windows
@@ -43,10 +46,11 @@ export function LoadingSpinner({
     }, 500);
 
     return () => clearInterval(interval);
-  }, [isActive]);
+  }, [isActive, isStreaming]);
 
+  // Only change text when streaming content
   useEffect(() => {
-    if (!isActive) return;
+    if (!isActive || !isStreaming) return;
 
     setLoadingTextIndex(Math.floor(Math.random() * loadingTexts.length));
 
@@ -56,7 +60,7 @@ export function LoadingSpinner({
     }, 4000);
 
     return () => clearInterval(interval);
-  }, [isActive]);
+  }, [isActive, isStreaming]);
 
   if (!isActive) return null;
 
@@ -64,9 +68,15 @@ export function LoadingSpinner({
 
   return (
     <Box marginTop={1}>
-      <Text color="cyan">
-        {spinnerFrames[spinnerFrame]} {loadingTexts[loadingTextIndex]}{" "}
-      </Text>
+      {isStreaming ? (
+        // Animated spinner only when content is streaming
+        <Text color="cyan">
+          {spinnerFrames[spinnerFrame]} {loadingTexts[loadingTextIndex]}{" "}
+        </Text>
+      ) : (
+        // Static indicator during thinking phase
+        <Text color="cyan">⏳ Thinking... </Text>
+      )}
       <Text color="gray">
         ({processingTime}s · ↑ {formatTokenCount(tokenCount)} tokens · esc to
         interrupt)

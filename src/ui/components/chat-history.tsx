@@ -1,5 +1,5 @@
-import React from "react";
-import { Box, Text } from "ink";
+import React, { useMemo } from "react";
+import { Box, Text, Static } from "ink";
 import { ChatEntry } from "../../agent/grok-agent.js";
 import { DiffRenderer } from "./diff-renderer.js";
 import { MarkdownRenderer } from "../utils/markdown-renderer.js";
@@ -211,21 +211,56 @@ export function ChatHistory({
   entries,
   isConfirmationActive = false,
 }: ChatHistoryProps) {
-  // Filter out tool_call entries with "Executing..." when confirmation is active
-  const filteredEntries = isConfirmationActive
-    ? entries.filter(
-        (entry) =>
-          !(entry.type === "tool_call" && entry.content === "Executing...")
-      )
-    : entries;
+  // Split entries into static (completed) and dynamic (streaming) parts
+  const { staticEntries, dynamicEntries } = useMemo(() => {
+    // Filter out tool_call entries with "Executing..." when confirmation is active
+    const filtered = isConfirmationActive
+      ? entries.filter(
+          (entry) =>
+            !(entry.type === "tool_call" && entry.content === "Executing...")
+        )
+      : entries;
+
+    // Keep last 20 entries max
+    const recent = filtered.slice(-20);
+
+    // Find the last streaming entry
+    const lastStreamingIndex = recent.findIndex((entry) => entry.isStreaming);
+
+    // If there's a streaming entry, split: everything before it is static
+    if (lastStreamingIndex !== -1) {
+      return {
+        staticEntries: recent.slice(0, lastStreamingIndex),
+        dynamicEntries: recent.slice(lastStreamingIndex),
+      };
+    }
+
+    // No streaming entries, everything is static
+    return {
+      staticEntries: recent,
+      dynamicEntries: [],
+    };
+  }, [entries, isConfirmationActive]);
 
   return (
     <Box flexDirection="column">
-      {filteredEntries.slice(-20).map((entry, index) => (
+      {/* Static component for completed messages - rendered once, never updates */}
+      <Static items={staticEntries}>
+        {(entry, index) => (
+          <MemoizedChatEntry
+            key={`${entry.timestamp.getTime()}-${index}`}
+            entry={entry}
+            index={index}
+          />
+        )}
+      </Static>
+
+      {/* Dynamic rendering only for streaming messages */}
+      {dynamicEntries.map((entry, index) => (
         <MemoizedChatEntry
-          key={`${entry.timestamp.getTime()}-${index}`}
+          key={`dynamic-${entry.timestamp.getTime()}-${index}`}
           entry={entry}
-          index={index}
+          index={staticEntries.length + index}
         />
       ))}
     </Box>

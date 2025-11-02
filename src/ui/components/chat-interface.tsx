@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from "react";
-import { Box, Text } from "ink";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { Box, Text, Static } from "ink";
 import { GrokAgent, ChatEntry } from "../../agent/grok-agent.js";
 import { useInputHandler } from "../../hooks/use-input-handler.js";
 import { LoadingSpinner } from "./loading-spinner.js";
@@ -66,45 +66,10 @@ function ChatInterfaceWithAgent({
   });
 
   useEffect(() => {
-    // Only clear console on non-Windows platforms or if not PowerShell
-    // Windows PowerShell can have issues with console.clear() causing flickering
-    const isWindows = process.platform === "win32";
-    const isPowerShell =
-      process.env.ComSpec?.toLowerCase().includes("powershell") ||
-      process.env.PSModulePath !== undefined;
+    // Completely disabled logo and console operations to prevent flickering
+    // Logo rendering can interfere with Ink's terminal control
 
-    if (!isWindows || !isPowerShell) {
-      console.clear();
-    }
-
-    // Add top padding
-    console.log("    ");
-
-    // Generate logo with margin to match Ink paddingX={2}
-    const logoOutput = cfonts.render("GROK", {
-      font: "3d",
-      align: "left",
-      colors: ["magenta", "gray"],
-      space: true,
-      maxLength: "0",
-      gradient: ["magenta", "cyan"],
-      independentGradient: false,
-      transitionGradient: true,
-      env: "node",
-    });
-
-    // Add horizontal margin (2 spaces) to match Ink paddingX={2}
-    const logoLines = (logoOutput as any).string.split("\n");
-    logoLines.forEach((line: string) => {
-      if (line.trim()) {
-        console.log(" " + line); // Add 2 spaces for horizontal margin
-      } else {
-        console.log(line); // Keep empty lines as-is
-      }
-    });
-
-    console.log(" "); // Spacing after logo
-
+    // Just initialize with empty history
     setChatHistory([]);
   }, []);
 
@@ -124,6 +89,10 @@ function ChatInterfaceWithAgent({
 
         try {
           let streamingEntry: ChatEntry | null = null;
+          let accumulatedContent = "";
+          let lastUpdateTime = 0;
+          const UPDATE_INTERVAL = 750; // Update UI every 750ms for maximum stability
+
           for await (const chunk of agent.processUserMessageStream(initialMessage)) {
             switch (chunk.type) {
               case "content":
@@ -137,14 +106,23 @@ function ChatInterfaceWithAgent({
                     };
                     setChatHistory((prev) => [...prev, newStreamingEntry]);
                     streamingEntry = newStreamingEntry;
+                    accumulatedContent = chunk.content;
+                    lastUpdateTime = Date.now();
                   } else {
-                    setChatHistory((prev) =>
-                      prev.map((entry, idx) =>
-                        idx === prev.length - 1 && entry.isStreaming
-                          ? { ...entry, content: entry.content + chunk.content }
-                          : entry
-                      )
-                    );
+                    accumulatedContent += chunk.content;
+                    const now = Date.now();
+
+                    // Only update UI if enough time has passed (throttle updates)
+                    if (now - lastUpdateTime >= UPDATE_INTERVAL) {
+                      setChatHistory((prev) =>
+                        prev.map((entry, idx) =>
+                          idx === prev.length - 1 && entry.isStreaming
+                            ? { ...entry, content: accumulatedContent }
+                            : entry
+                        )
+                      );
+                      lastUpdateTime = now;
+                    }
                   }
                 }
                 break;
@@ -209,9 +187,12 @@ function ChatInterfaceWithAgent({
                 break;
               case "done":
                 if (streamingEntry) {
+                  // Final update with any remaining accumulated content
                   setChatHistory((prev) =>
                     prev.map((entry) =>
-                      entry.isStreaming ? { ...entry, isStreaming: false } : entry
+                      entry.isStreaming
+                        ? { ...entry, content: accumulatedContent, isStreaming: false }
+                        : entry
                     )
                   );
                 }
@@ -262,21 +243,25 @@ function ChatInterfaceWithAgent({
       processingStartTime.current = Date.now();
     }
 
+    // Only update timer every 5 seconds during thinking phase
+    // Update every second only when streaming
+    const updateInterval = isStreaming ? 1000 : 5000;
+
     const interval = setInterval(() => {
       setProcessingTime(
         Math.floor((Date.now() - processingStartTime.current) / 1000)
       );
-    }, 1000);
+    }, updateInterval);
 
     return () => clearInterval(interval);
   }, [isProcessing, isStreaming]);
 
-  const handleConfirmation = (dontAskAgain?: boolean) => {
+  const handleConfirmation = useCallback((dontAskAgain?: boolean) => {
     confirmationService.confirmOperation(true, dontAskAgain);
     setConfirmationOptions(null);
-  };
+  }, [confirmationService]);
 
-  const handleRejection = (feedback?: string) => {
+  const handleRejection = useCallback((feedback?: string) => {
     confirmationService.rejectOperation(feedback);
     setConfirmationOptions(null);
 
@@ -286,7 +271,7 @@ function ChatInterfaceWithAgent({
     setTokenCount(0);
     setProcessingTime(0);
     processingStartTime.current = 0;
-  };
+  }, [confirmationService]);
 
   return (
     <Box flexDirection="column" paddingX={2}>
@@ -344,6 +329,7 @@ function ChatInterfaceWithAgent({
             isActive={isProcessing || isStreaming}
             processingTime={processingTime}
             tokenCount={tokenCount}
+            isStreaming={isStreaming}
           />
 
           <ChatInput
